@@ -3,8 +3,11 @@
 真正的malloc 内存不够用的时候会sbrk向系统申请，上限是虚拟内存的最大值。
 而这个实现事先申请好最大的内存，作为虚拟内存的上限，sbrk的时候仅增大指针值即可。
 */
-#include <stduni.h>
-
+#include <stddef.h>//size_t
+#include <stdlib.h>//malloc
+#include <errno.h>//errno
+#include <stdio.h>
+#include <stdbool.h>
 
 int mm_init(void);
 void* mm_malloc(size_t size);
@@ -13,6 +16,7 @@ void mm_free(void* ptr);
 static char* mem_heap;//指向堆底
 static char* mem_brk;//指向当前堆顶+1
 static char* mem_max_addr;//最大的虚拟内存地址+1
+static char* heap_listtp;//指向序言块
 
 #define MAX_HEAP 100*1024*1024 //100M
 #define WSIZE 4//BYTES 字
@@ -39,6 +43,8 @@ static char* mem_max_addr;//最大的虚拟内存地址+1
 #define NEXT_BLKP(bp) ((char*)(bp)+GET_SIZE(((char*)(bp)-WSIZE)))
 #define PREV_BLKP(bp) ((char*)(bp)-GET_SIZE(((char*)(bp)-DSIZE)))
 
+static void* coalesce(void *bp);
+static void * extend_heap(size_t words);
 /*
 模拟虚拟内存的最大值，100M
 */
@@ -76,7 +82,7 @@ int mm_init(void)
     PUT(heap_listtp+(3*WSIZE),PACK(0,1));
     heap_listtp+=(2*WSIZE);
     //扩展空的堆
-    if(extern_heap(CHUNKSIZE/WSIZE)==NULL)
+    if(extend_heap(CHUNKSIZE/WSIZE)==NULL)
     {
         return -1;
     }
@@ -113,8 +119,10 @@ void mm_free(void* bp)
     PUT(HDRP(bp),PACK(size,0));
     PUT(FTRP(bp),PACK(size,0));
     coalesce(bp);
+    printf("free\n");
 }
 
+//合并
 static void* coalesce(void *bp)
 {
     size_t prev_alloc=GET_ALLOC(FTRP(PREV_BLKP(bp)));
@@ -127,7 +135,7 @@ static void* coalesce(void *bp)
     }
     else if(prev_alloc&&!next_alloc)
     {
-        siez+=GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        size+=GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp),PACK(size,0));
         PUT(FTRP(bp),PACK(size,0));
     }
@@ -146,6 +154,46 @@ static void* coalesce(void *bp)
         bp=PREV_BLKP(bp);
     }
     return bp;
+}
+
+/*放置并分割*/
+bool place(char* bp,size_t asize)
+{
+    /*
+    //方案一，仅放置，不分割
+    char* headptr=HDRP(bp);
+    PUT(headptr,PACK(GET_SIZE(headptr),1));
+    */
+
+    //方案二，放置并分割
+    char* headptr=HDRP(bp);
+    size_t totalsize = GET_SIZE(bp);
+    size_t newsize = totalsize- (DSIZE+asize);
+    PUT(headptr,PACK(DSIZE+asize,1));
+    char* footptr=FTRP(bp);
+    PUT(footptr,PACK(DSIZE+asize,1));
+
+    bp=footptr+WSIZE;
+    char* newheadptr=HDRP(bp);
+    PUT(newheadptr,PACK(newsize,0));
+    char* newfootptr=FTRP(bp);
+    PUT(newfootptr,PACK(newsize,0));
+    return true;
+}
+
+/*首次适配搜索*/
+char* find_fit(size_t asize)
+{
+    char* p=heap_listtp+WSIZE;
+    while(GET_SIZE(p))
+    {
+        if((GET_ALLOC(p)-DSIZE)>=asize)
+        {
+            return p+WSIZE;
+        }
+        p+=GET_SIZE(p);
+    }
+    return NULL;
 }
 
 /*分配块，16字节对齐 即2倍双字*/
@@ -170,6 +218,7 @@ void *mm_malloc(size_t size)
 
     if((bp=find_fit(asize))!=NULL)
     {
+        printf("find!\n");
         place(bp,asize);
         return bp;
     }
@@ -179,17 +228,18 @@ void *mm_malloc(size_t size)
         return NULL;
     }
     place(bp,asize);
+    printf("allocate new mem\n");
     return bp;
 }
 
-/*放置并分割*/
-bool place(char* bp,size_t asize)
-{
 
+int main()
+{
+    mem_init();
+    mm_init();
+    char* p=mm_malloc(1024*1);
+    if(p)
+        mm_free(p);
+    return 0;
 }
 
-/*首次适配搜索*/
-char* find_fit(size_t asize)
-{
-
-}

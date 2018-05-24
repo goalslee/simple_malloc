@@ -167,7 +167,7 @@ bool place(char* bp,size_t asize)
 
     //方案二，放置并分割
     char* headptr=HDRP(bp);
-    size_t totalsize = GET_SIZE(bp);
+    size_t totalsize = GET_SIZE(headptr);
     size_t newsize = totalsize- (DSIZE+asize);
     PUT(headptr,PACK(DSIZE+asize,1));
     char* footptr=FTRP(bp);

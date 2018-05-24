@@ -33,7 +33,7 @@ static char* heap_listtp;//指向序言块
 
 /*从头块或脚块获取块大小和是否分配*/
 #define GET_SIZE(p) (GET(p)&~0x7)
-#define GET_ALLOC(p) (GET(p)&~0x1)
+#define GET_ALLOC(p) (GET(p)&0x1)
 
 /*通过块指针计算头块和脚块*/
 #define HDRP(bp) ((char*)(bp)-WSIZE)
@@ -131,6 +131,7 @@ static void* coalesce(void *bp)
 
     if(prev_alloc&&next_alloc)//前后都已经分配
     {
+        printf("no coalesce\n");
         return bp;
     }
     else if(prev_alloc&&!next_alloc)
@@ -138,12 +139,16 @@ static void* coalesce(void *bp)
         size+=GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp),PACK(size,0));
         PUT(FTRP(bp),PACK(size,0));
+        printf("next coalesce\n");
     }
     else if(!prev_alloc&&next_alloc)
     {
         size+=GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(HDRP(bp),PACK(size,0));
-        PUT(FTRP(bp),PACK(size,0));
+        PUT(HDRP(PREV_BLKP(bp)),PACK(size,0));
+        bp=PREV_BLKP(bp);
+        printf("prev coalesce\n");
+
     }
     else
     {
@@ -152,6 +157,7 @@ static void* coalesce(void *bp)
         PUT(HDRP(PREV_BLKP(bp)),PACK(size,0));
         PUT(FTRP(NEXT_BLKP(bp)),PACK(size,0));
         bp=PREV_BLKP(bp);
+        printf("prev&next coalesce\n");
     }
     return bp;
 }
@@ -173,7 +179,8 @@ bool place(char* bp,size_t asize)
     char* footptr=FTRP(bp);
     PUT(footptr,PACK(DSIZE+asize,1));
 
-    bp=footptr+WSIZE;
+    
+    bp=NEXT_BLKP(bp);
     char* newheadptr=HDRP(bp);
     PUT(newheadptr,PACK(newsize,0));
     char* newfootptr=FTRP(bp);
@@ -187,7 +194,8 @@ char* find_fit(size_t asize)
     char* p=heap_listtp+WSIZE;
     while(GET_SIZE(p))
     {
-        if((GET_ALLOC(p)-DSIZE)>=asize)
+        printf("need size %d,now size %d,valid %d\n",DSIZE+asize,GET_SIZE(p),GET_ALLOC(p));
+        if(!GET_ALLOC(p)&&(GET_SIZE(p)-DSIZE)>=asize)
         {
             return p+WSIZE;
         }
@@ -237,9 +245,21 @@ int main()
 {
     mem_init();
     mm_init();
-    char* p=mm_malloc(1024*1);
+    char* p=mm_malloc(10*1);
+    char* pp=mm_malloc(102);
+    char* ppp=mm_malloc(567);
+    char* pppp=mm_malloc(4456);
+    char* ppppp=mm_malloc(1234);
+    if(ppppp)
+        mm_free(ppppp);
     if(p)
         mm_free(p);
+    if(pp)
+        mm_free(pp);
+    if(ppp)
+        mm_free(ppp);
+    if(pppp)
+        mm_free(pppp);
     return 0;
 }
 
